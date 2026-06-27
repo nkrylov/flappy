@@ -2,6 +2,7 @@ use bracket_lib::prelude::*;
 
 const SCREEN_WIDTH : i32 = 80;
 const SCREEN_HEIGHT : i32 = 50;
+const START_X: i32 = 5;
 const FRAME_DURATION : f32 = 75.0;
 
 enum GameMode {
@@ -27,7 +28,7 @@ impl Player {
 
     fn render(&mut self, ctx: &mut BTerm) {
         ctx.set(
-            0,
+            START_X,
             self.y,
             YELLOW,
             BLACK,
@@ -84,7 +85,7 @@ impl Obstacle {
 
     fn hit_obstacle(&self, player: &Player) -> bool {
         let half_size = self.size / 2;
-        let does_x_match = player.x == self.x;
+        let does_x_match = player.x + START_X == self.x;
         let player_above_gap = player.y < self.gap_y - half_size;
         let player_below_gap = player.y > self.gap_y + half_size;
         does_x_match && (player_above_gap || player_below_gap)
@@ -193,8 +194,12 @@ impl GameState for State {
 }
 
 fn main() -> BError {
-    let context = BTermBuilder::simple80x50()
-        .with_title("Flappy Chicken")
+    let context = BTermBuilder::new()
+        .with_font("../resources/flappy32.png", 32, 32)
+        .with_simple_console(SCREEN_WIDTH, SCREEN_HEIGHT, "../resources/flappy32.png")
+        .with_fancy_console(SCREEN_WIDTH, SCREEN_HEIGHT, "../resources/flappy32.png")
+        .with_title("Flappy Dragon Enhanced")
+        .with_tile_dimensions(16, 16)
         .build()?;
     main_loop(context, State::new())
 }
