@@ -1,10 +1,62 @@
 use bracket_lib::prelude::*;
+use rodio::{Decoder, OutputStream, Sink, Source};
+use std::fs::File;
+use std::io::BufReader;
+use std::path::PathBuf;
 
 const SCREEN_WIDTH : i32 = 80;
 const SCREEN_HEIGHT : i32 = 50;
 const START_X: i32 = 5;
 const FRAME_DURATION : f32 = 75.0;
 const CHICKEN_FRAMES : [u16; 6] = [ 64, 1, 2, 3, 2, 1 ];
+
+fn resource_path(file_name: &str) -> PathBuf {
+    let mut candidates = Vec::new();
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidates.push(current_dir.join("resources").join(file_name));
+        candidates.push(current_dir.join("..").join("resources").join(file_name));
+    }
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            candidates.push(exe_dir.join("resources").join(file_name));
+            candidates.push(exe_dir.join("..").join("resources").join(file_name));
+            candidates.push(exe_dir.join("..").join("..").join("resources").join(file_name));
+        }
+    }
+
+    candidates
+        .into_iter()
+        .find(|path| path.exists())
+        .unwrap_or_else(|| PathBuf::from("resources").join(file_name))
+}
+
+struct Music {
+    _stream: OutputStream,
+    sink: Sink,
+}
+
+impl Music {
+    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let (_stream, stream_handle) = OutputStream::try_default()?;
+        let sink = Sink::try_new(&stream_handle)?;
+        let song = BufReader::new(File::open(resource_path("chicken-wing-song_gKkgSVP.mp3"))?);
+
+        sink.append(Decoder::new(song)?.repeat_infinite());
+        sink.pause();
+
+        Ok(Self { _stream, sink })
+    }
+
+    fn play(&self) {
+        self.sink.play();
+    }
+
+    fn pause(&self) {
+        self.sink.pause();
+    }
+}
 
 enum GameMode {
     Menu,
@@ -122,6 +174,7 @@ struct State {
     obstacle: Obstacle,
     mode: GameMode,
     score: i32,
+    music: Option<Music>,
 }
 
 impl State {
@@ -132,6 +185,7 @@ impl State {
             obstacle: Obstacle::new(SCREEN_WIDTH, 0),
             mode: GameMode::Menu,
             score: 0,
+            music: Music::new().ok(),
         }
     }
 
@@ -209,6 +263,13 @@ impl State {
 
 impl GameState for State {
     fn tick(&mut self, ctx: &mut BTerm) {
+        if let Some(music) = &self.music {
+            match self.mode {
+                GameMode::Playing => music.play(),
+                GameMode::Menu | GameMode::End => music.pause(),
+            }
+        }
+
         match self.mode {
             GameMode::Menu => self.main_menu(ctx),
             GameMode::End => self.dead(ctx),
@@ -218,12 +279,31 @@ impl GameState for State {
 }
 
 fn main() -> BError {
+    let font_path = resource_path("flappy32.png").to_string_lossy().to_string();
     let context = BTermBuilder::new()
-        .with_font("../resources/flappy32.png", 32, 32)
-        .with_simple_console(SCREEN_WIDTH, SCREEN_HEIGHT, "../resources/flappy32.png")
-        .with_fancy_console(SCREEN_WIDTH, SCREEN_HEIGHT, "../resources/flappy32.png")
+        .with_font(&font_path, 32, 32)
+        .with_simple_console(SCREEN_WIDTH, SCREEN_HEIGHT, &font_path)
+        .with_fancy_console(SCREEN_WIDTH, SCREEN_HEIGHT, &font_path)
         .with_title("Flappy Chicken")
         .with_tile_dimensions(16, 16)
         .build()?;
     main_loop(context, State::new())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resources_are_accessible_and_song_decodes() {
+        let font_path = resource_path("flappy32.png");
+        let song_path = resource_path("chicken-wing-song_gKkgSVP.mp3");
+
+        assert!(font_path.exists(), "missing font resource: {:?}", font_path);
+        assert!(song_path.exists(), "missing song resource: {:?}", song_path);
+
+        let song = BufReader::new(File::open(&song_path).expect("song file should open"));
+        Decoder::new(song).expect("song file should decode as audio");
+    }
+}
+
