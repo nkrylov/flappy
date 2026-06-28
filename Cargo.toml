@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 bracket-lib = "~0.8.1"
+rodio = "0.17.3"
